@@ -241,6 +241,79 @@ npx wrangler d1 execute book --local --file=schema.sql
 
 ---
 
+## 🔑 远程书签管理 API
+
+支持通过 HTTP API 远程修改已有书签的全部字段（名称、URL、Logo、描述、分类、排序、私有状态），用于脚本化/自动化管理书签。
+
+### KV 配置
+
+在 KV namespace `NAV_AUTH` 中创建两个键（同一配对）：
+
+| KV 键 | 说明 |
+| :--- | :--- |
+| `admin_api` | API 密钥，**建议使用 32 位以上随机字符串** |
+| `admin_username` | 关联的用户名 |
+
+> 认证用请求头 `Authorization: Bearer <admin_api 的值>`，恒定时间比较，不使用浏览器 session。
+
+### 接口
+
+```
+POST /api/bookmark-update
+```
+
+**请求头**
+```
+Authorization: Bearer <admin_api 的值>
+Content-Type: application/json
+```
+
+**请求体**（`id` 必填，其余字段均可选，只传要修改的字段）：
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `id` | number | 书签 ID（必填） |
+| `name` | string | 书签名 |
+| `url` | string | 网址（修改后自动重建 favicon） |
+| `logo` | string | 图标地址 |
+| `desc` | string | 描述 |
+| `catelog_id` | number | 分类 ID（修改后同步分类名） |
+| `sort_order` | number | 排序号 |
+| `is_private` | 0 \| 1 | 是否私有 |
+
+> 目标分类为私有时，书签会被强制设为私有。
+
+**示例（curl）**
+```bash
+# 只改名称
+curl -X POST "https://你的域名/api/bookmark-update" \
+  -H "Authorization: Bearer 密钥" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 5, "name": "新名字"}'
+
+# 改 URL + 描述 + 换分类
+curl -X POST "https://你的域名/api/bookmark-update" \
+  -H "Authorization: Bearer 密钥" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 5, "url": "https://新站.com", "desc": "新描述", "catelog_id": 3}'
+```
+
+**返回**
+```json
+{ "code": 200, "message": "书签更新成功", "data": { "id": 5, "name": "新名字" } }
+```
+`data` 中只包含本次修改的字段。
+
+**错误码**
+| 状态码 | 含义 |
+| :--- | :--- |
+| 401 | API Key 错误 / 未携带 `Authorization` |
+| 400 | 参数不合法（缺 id、字段校验失败、分类不存在等） |
+| 404 | 书签 ID 不存在 |
+| 409 | 新 URL 已被其他书签占用 |
+
+---
+
 ## ❗ 常见部署问题
 
 - `/admin` 无法登录或反复跳回登录页：确认已绑定 `NAV_AUTH`，并在该 KV 中创建 `admin_username`、`admin_password`。
@@ -264,6 +337,7 @@ npx wrangler d1 execute book --local --file=schema.sql
 ## 📋 更新日志
 
 <!-- changelog:start -->
+- 🔑 **2026-09-12**：新增远程书签管理 API（`/api/bookmark-update`，KV 中 `admin_api`/`admin_username` 认证）
 - 📂 **2026-07-14**：增加卡片风格三，风格增加默认壁纸
 - 🔧 **2026-06-23**：清理 AI 设置调试日志
 - 📂 **2026-06-21**：增强分类结构与私密数据支持
