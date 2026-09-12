@@ -9,6 +9,7 @@ import {
   isAdminAuthenticated,
   validateCsrfToken,
   validateOrigin,
+  onRequest,
 } from '../functions/_middleware.js';
 import { HOME_CACHE_VERSION } from '../functions/constants.js';
 
@@ -141,4 +142,33 @@ test('clearHomeCache deletes only versioned home cache keys', async () => {
   ]);
   assert.equal(kv.store.get('home_html_public'), 'legacy-public');
   assert.equal(kv.store.get('home_html_private'), 'legacy-private');
+});
+
+// onRequest 中间件：bookmark-update 接口使用 API-Key 认证，应豁免 CSRF token 校验
+test('onRequest does not require CSRF token for /api/bookmark-update', async () => {
+  const env = { NAV_AUTH: createKv() };
+  const request = new Request('https://example.com/api/bookmark-update', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer test-key' }, // 无 X-CSRF-Token
+    body: JSON.stringify({ id: 1, name: 'x' }),
+  });
+  let called = false;
+  const context = { request, env, next: () => { called = true; return new Response('ok'); } };
+  const response = await onRequest(context);
+  // 不 return 403，放行到 endpoint 层认证
+  assert.equal(called, true);
+  assert.equal(response.status, 200);
+});
+
+// onRequest 中间件：普通管理 API 仍要求 CSRF token
+test('onRequest rejects /api/config without a valid CSRF token', async () => {
+  const env = { NAV_AUTH: createKv() };
+  const request = new Request('https://example.com/api/config', {
+    method: 'POST',
+    headers: { Cookie: 'admin_session=abc', 'content-type': 'application/json' }, // 无 X-CSRF-Token
+    body: JSON.stringify({ name: 'x' }),
+  });
+  const context = { request, env, next: () => new Response('ok') };
+  const response = await onRequest(context);
+  assert.equal(response.status, 403);
 });

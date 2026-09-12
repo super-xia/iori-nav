@@ -317,6 +317,9 @@ export async function onRequest(context) {
       if (!validateOrigin(request)) {
         return errorResponse('Forbidden: invalid origin', 403);
       }
+    } else if (url.pathname === '/api/bookmark-update') {
+      // 远程书签修改接口：使用 Authorization 的 API-Key 认证，天然免疫 CSRF，
+      // 不依赖浏览器 session/CSRF token，故跳过 CSRF 校验（认证仍在其端点上强制执行）。
     } else {
       // 管理 API：使用 CSRF token 校验
       const { valid } = await validateCsrfToken(request, env);
